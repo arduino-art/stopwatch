@@ -33,6 +33,7 @@ unsigned long laptime;
 byte startPin = 7;                             //улаз коме се доводи сигнал за старт као и за пролазно време
 byte stopPin = 8;                              //улаз коме се доводи сигнал за стоп бројача
 byte resetPin = 9;                             //улаз коме се доводи сигнал за ресет бројача
+byte enablePin = 13;                           //улаз коме се доводи сигнал за омогућавање заустављања бројача старт сигналом
 
 byte startButtonState = 1;
 byte previousStartButtonState = 1;
@@ -40,6 +41,8 @@ byte stopButtonState = 1;
 byte previousStopButtonState = 1;
 byte resetButtonState = 1;
 byte previousResetButtonState = 1;
+byte enableButtonState = 1;
+byte previousEnableButtonState = 1;
 int debounceInterval = 1000;
 byte startCondition = 0;
 
@@ -52,7 +55,8 @@ void setup() {
   pinMode(startPin, INPUT_PULLUP);
   pinMode(stopPin, INPUT_PULLUP);
   pinMode(resetPin, INPUT_PULLUP);
-  // Serial.begin(115200);
+  pinMode(enablePin, INPUT_PULLUP);
+
   lc1.shutdown(0, false); // turn off power saving, enables display
   lc1.setIntensity(0, 15); // sets brightness (0~15 possible values)
   lc1.clearDisplay(0);// clear screen
@@ -63,12 +67,16 @@ void setup() {
   lc2.clearDisplay(0);// clear screen
   lc2.setChar(0, 2, '-', false);
   lc2.setChar(0, 5, '-', false);
+
+  Serial.begin(115200);
+  
 }
 
 void loop() {
   startButtonState = digitalRead(startPin);
   stopButtonState = digitalRead(stopPin);
   resetButtonState = digitalRead(resetPin);
+  enableButtonState = digitalRead(enablePin);
   currenttime = micros();
 
 
@@ -83,23 +91,34 @@ void loop() {
   if (startCondition == 1) {
     timeCounter();
   }
+  
+  if ((previousEnableButtonState == HIGH) && (enableButtonState == LOW) && (startCondition == 1)) {
+    previousEnableButtonState = enableButtonState;
+  }
 
-
-  if ((previousStartButtonState == HIGH) && (startButtonState == LOW) && (startCondition == 1)) {
+  if ((previousStartButtonState == HIGH) && (startButtonState == LOW) && (startCondition == 1) && (previousEnableButtonState == HIGH)) {
     lapTimeCounter();
     millisPrevious = millis();
     previousStartButtonState = startButtonState;
   }
 
 
+  if ((previousStartButtonState == HIGH) && (startButtonState == LOW) && (previousEnableButtonState == LOW)) {
+    startCondition = 2;
+  }
+
+
+
   if ((startButtonState == HIGH) && (millis() - millisPrevious >= debounceInterval)) {
     previousStartButtonState = startButtonState;
   }
 
+
+
   if ((previousStopButtonState == HIGH) && (stopButtonState == LOW) && (startCondition == 1)) {
     startCondition = 3;
   }
-  if ((previousResetButtonState == HIGH) && (resetButtonState == LOW) && (startCondition == 3)) {
+  if ((previousResetButtonState == HIGH) && (resetButtonState == LOW) && ((startCondition == 3) or (startCondition == 2))) {
     startCondition = 0;
     a = 0; a_lap = 0;
     b = 0; b_lap = 0;
@@ -108,18 +127,20 @@ void loop() {
     e = 0; e_lap = 0;
     f = 0; f_lap = 0;
     prev_elapsedtime = 0;
+    previousEnableButtonState = HIGH;
+    
   }
 
+  
   DispData();
 
+  Serial.print("Time: "); Serial.print(f); Serial.print(e); Serial.print(":");
+  Serial.print(d); Serial.print(c); Serial.print("."); Serial.print(b); Serial.println(a);
 
-
-  //Serial.print("Time: "); Serial.print(f); Serial.print(e); Serial.print(":"); 
-  //Serial.print(d); Serial.print(c); Serial.print("."); Serial.print(b); Serial.println(a);
-
-  //Serial.print("Lap:  "); Serial.print(f_lap); Serial.print(e_lap); 
-  //Serial.print(":"); Serial.print(d_lap); Serial.print(c_lap); Serial.print("."); Serial.print(b_lap); Serial.println(a_lap);
+  Serial.print("Lap:  "); Serial.print(f_lap); Serial.print(e_lap);
+  Serial.print(":"); Serial.print(d_lap); Serial.print(c_lap); Serial.print("."); Serial.print(b_lap); Serial.println(a_lap);
 }
+
 
 
 
@@ -127,7 +148,7 @@ void timeCounter() {
   elapsedtime = currenttime - previoustime;
   correctionStep = currenttime - previousStep;
 
-  if (correctionStep  >= 1000000) {        //овај део кода је за фино подешавање, односно за постизање веће прецизности штоперице
+  if (correctionStep  >= 1000000) {         //овај део кода је за фино подешавање, односно за постизање веће прецизности штоперице
     previoustime = previoustime + 94;       //сваке секунде се укупно протекло време, које се приказује на дисплеју, смањује за 94 μs
     previousStep = currenttime;             //ова вредност се експериментално утврђује и важи само за дати ардуино
   }
@@ -145,6 +166,7 @@ void timeCounter() {
   f = (elapsedtime / 600000000) % 6;     // десетине минута = остатак при дељењу са 6 количника целобројног дељења μs / 600000000 (765338972 μs / 600000000 = 1, 1/6=0 остатак је 1)
   // крајњи резултат из примера 765338972 μs пребачено у жељени формат је 12:45.33
 }
+
 
 
 
